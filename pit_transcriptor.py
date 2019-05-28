@@ -7,8 +7,6 @@ from google.cloud.speech import types
 from google.cloud.storage import Blob
 
 from pathlib import Path
-from unsync import unsync
-import asyncio
 import os
 import io
 import sys
@@ -25,7 +23,7 @@ file_types = {
         '.wav': enums.RecognitionConfig.AudioEncoding.LINEAR16,
     }
 
-async def get_audio_file(audio):
+def get_audio_file(uri):
     """takes a uri and creates a transcript for it"""
     audio_type = types.RecognitionAudio(uri=uri)
     config = types.RecognitionConfig(
@@ -34,28 +32,27 @@ async def get_audio_file(audio):
             )
     operation = speech_client.long_running_recognize(config, audio_type)
     response = operation.result()
-    result = [result in raw_transcript]
-    base_name = audio_file.stem
-    script_index = base_name.split('_')[-1]
+    results = [result.alternatives[0].transcript for result in response.results]
+    script_index = uri.split(' ')[-1].strip('.flac')
 
     if int(script_index) % 2 == 0:
         speaker = 'Speaker_1'
     else:
         speaker = 'Speaker_2'
 
-    transcript = speaker + '\n' + '\n'.join(raw_transcript)
+    transcript = speaker + '\n' + '\n'.join(results)
     return transcript
 
-transcript_files = []
-async def main():
+def main():
+    transcript_file_list = []
     for blob in get_blob_items():
-        script = asyncio.create_task(
-            get_audio_file(f'{GOOGLE_STORAGE_URI}/{blob.name}')
-            )
-        await script
-        transcript_files.append(script)
+        uri = f'{GOOGLE_STORAGE_URI}/{blob.name}'
+        print(f'getting transcript for {uri}')
+        script = get_audio_file(uri)
+        transcript_file_list.append(script)
 
     with open('transcript.txt', 'w') as transcript_file:
-        transcript_file.writelines(transcript_objects)
+        transcript_file.writelines(transcript_file_list)
 
-asyncio.run(main())
+if __name__ == "__main__":
+   main()
